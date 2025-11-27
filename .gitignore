@@ -1,24 +1,11 @@
+# Python cache and environment files
+__pycache__/
+*.pyc
+.env/
+
+# Virtual environments for each service
 customerservice_env/
-.env/
-__pycache__/
-*.pyc
-
 inventoryservice_env/
-.env/
-__pycache__/
-*.pyc
-
-pricingservice_env/
-.env/
-__pycache__/
-*.pyc
-
 orderservice_env/
-.env/
-__pycache__/
-*.pyc
+pricingservice_env/
 notificationservice_env/
-.env/
-__pycache__/
-*.pyc
-
