@@ -76,5 +76,4 @@ INSERT INTO pricing_rules (product_id, min_quantity, discount_percentage) VALUES
 (2, 10, 15.00),
 (3, 10, 12.00);
 
-
-
+select * from inventory
