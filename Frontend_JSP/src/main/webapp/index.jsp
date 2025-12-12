@@ -2,12 +2,13 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>JSP - Hello World</title>
+    <title>Product Catolag</title>
 </head>
 <body>
-<h1><%= "Hello World!" %>
-</h1>
-<br/>
-<a href="hello-servlet">Hello Servlet</a>
+<h2>Inventory Check Result</h2>
+<pre>
+<%= request.getAttribute("inventoryResponse") %>
+</pre>
+
 </body>
 </html>
