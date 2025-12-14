@@ -13,7 +13,7 @@ def home():
 # Adjust these parameters according to your database setup (check the mysql port you are using)
 db_config = {
     'host': 'localhost',
-    'port': 3306,
+    'port': 3307,
     'user': 'ecommerce_user',
     'password': 'secure_password',
     'database': 'ecommerce_system'
@@ -110,6 +110,20 @@ def update_inventory():
     return jsonify({"message": "Inventory updated successfully"}), 200
 
 
+# Get all products in inventory with details
+@app.route('/api/inventory/catalog', methods=['GET'])
+def get_inventory_catalog():
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+    cursor = conn.cursor(dictionary=True)
+    query = "SELECT product_id, product_name, quantity_available, unit_price FROM inventory"
+    cursor.execute(query)
+    products = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return jsonify({"products": products}), 200
 
 if __name__ == "__main__":
     app.run(port=5002, debug=True)
