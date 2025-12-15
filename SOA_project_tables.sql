@@ -76,6 +76,18 @@ INSERT INTO pricing_rules (product_id, min_quantity, discount_percentage) VALUES
 (2, 10, 15.00),
 (3, 10, 12.00);
 
+INSERT INTO tax_rates (region, tax_rate) VALUES
+('default', 14.00),
+('Cairo', 14.50),
+('Giza', 13.75),
+('Alexandria', 15.00),
+('International', 0.00);
+TRUNCATE TABLE tax_rates;
+
+select * from tax_rates;
+
 select * from inventory;
+
+select * from pricing_rules;
 
 SHOW VARIABLES LIKE 'port';
