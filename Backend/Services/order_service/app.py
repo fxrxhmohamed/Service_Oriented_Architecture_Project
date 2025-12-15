@@ -252,6 +252,39 @@ def get_order_details(order_id):
         "status": order['status'],
         "created_at": order['created_at']
     }), 200
+############################################
+# Get orders by customer_id used by Customer Service
+@app.route("/api/orders", methods=["GET"])
+def get_orders_by_customer():
+    customer_id = request.args.get("customer_id")
+
+    if not customer_id:
+        return jsonify({"error": "customer_id query parameter is required"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+
+    # Get orders for customer
+    cursor.execute("SELECT order_id, total_amount, status, created_at FROM orders WHERE customer_id = %s",(customer_id,))
+    orders = cursor.fetchall()
+
+    if not orders:
+        cursor.close()
+        conn.close()
+        return jsonify([]), 200  
+
+    # Attach items to each order
+    for order in orders:
+        cursor.execute("SELECT product_id, quantity, unit_price FROM order_items WHERE order_id = %s",(order["order_id"],))
+        order["items"] = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return jsonify(orders), 200
 
 if __name__ == "__main__":
     app.run(port=5001, debug=True)
