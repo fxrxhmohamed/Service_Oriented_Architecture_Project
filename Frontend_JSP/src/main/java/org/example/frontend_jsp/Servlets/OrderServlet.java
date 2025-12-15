@@ -1,41 +1,57 @@
 package org.example.frontend_jsp.Servlets;
-import java.io.IOException;
-import java.net.http.*;
-import java.net.URI;
 
 import jakarta.servlet.ServletException;
-import jakarta.servlet.http.*;
 import jakarta.servlet.annotation.WebServlet;
-@WebServlet("/submitOrder")
+import jakarta.servlet.http.*;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.*;
+import java.nio.charset.StandardCharsets;
+
+@WebServlet("/order")
 public class OrderServlet extends HttpServlet {
-    protected void doPost(HttpServletRequest request,
-                          HttpServletResponse response)
+
+    private static final String ORDER_SERVICE_URL = "http://localhost:5001/api/orders";
+    /* =======================
+       CREATE ORDER (POST)
+       ======================= */
+    @Override
+    protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
-        // Get form parameters
         String customerId = request.getParameter("customer_id");
         String productId = request.getParameter("product_id");
         String quantity = request.getParameter("quantity");
 
-        // Build JSON payload
-        String jsonPayload = String.format(
-                "{\"customer_id\":%s,\"products\":[{\"product_id\":%s,\"quantity\":%s}]}",
-                customerId, productId, quantity
-        );
+        if (customerId == null || productId == null || quantity == null) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Missing customer_id, product_id, or quantity");
+            return;
+        }
 
-        // Call Flask Order Service
+        // JSON expected by Order Service
+        String jsonPayload = String.format("""
+            {
+              "customer_id": %s,
+              "products": [
+                {
+                  "product_id": %s,
+                  "quantity": %s
+                }
+              ]
+            }
+            """, customerId, productId, quantity);
+
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest flaskRequest = HttpRequest.newBuilder()
-                .uri(URI.create("http://localhost:5001/api/orders/create"))
+                .uri(URI.create(ORDER_SERVICE_URL + "/create"))
                 .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                .POST(HttpRequest.BodyPublishers.ofString(jsonPayload, StandardCharsets.UTF_8))
                 .build();
 
         try {
-            HttpResponse<String> flaskResponse =
-                    client.send(flaskRequest, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> flaskResponse = client.send(flaskRequest, HttpResponse.BodyHandlers.ofString());
 
-            // Forward to confirmation page
             request.setAttribute("orderResponse", flaskResponse.body());
             request.getRequestDispatcher("confirmation.jsp").forward(request, response);
 
@@ -43,4 +59,6 @@ public class OrderServlet extends HttpServlet {
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }
+
+
 }
