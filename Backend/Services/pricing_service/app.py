@@ -5,6 +5,10 @@ import requests
 
 app = Flask(__name__)
 
+@app.get("/")
+def home():
+    return {"message": "Pricing Service running"}
+
 # Database connection configuration
 db_config = {
     'host': 'localhost',
