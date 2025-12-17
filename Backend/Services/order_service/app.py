@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 import mysql.connector
 from mysql.connector import Error
 import requests
+import math
 
 # URL of the Inventory Service used to check products availability
 INVENTORY_SERVICE_CHECK_URL = "http://localhost:5002/api/inventory/check"
@@ -11,6 +12,9 @@ INVENTORY_SERVICE_UPDATE_URL = "http://localhost:5002/api/inventory/update"
 
 # URL for Pricing service to calculate order price
 PRICING_SERVICE_URL = "http://localhost:5003/api/pricing/calculate"
+
+# URL for Customer service to vaildate customer_id
+CUSTOMER_SERVICE_URL = "http://localhost:5004/api/customers"
 
 # Database connection configuration
 # Adjust these parameters according to your database setup (check the mysql port you are using)
@@ -39,14 +43,16 @@ def home():
 
 ####################### Helper functions #######################
 
-# check if the custmer exists -> to be updated later after building customer service (call its api, instead of querying db)
-def validate_customer_id(conn, customer_id):
-    cursor = conn.cursor(dictionary=True)
-    # query customer db
-    query = "Select customer_id from customers where customer_id = %s"
-    cursor.execute(query, (customer_id,))
-    # return query results
-    return cursor.fetchone()
+# check if the custmer exists using the Customer Service
+def validate_customer_id(customer_id):
+    try: 
+        customer_response = requests.get(f"{CUSTOMER_SERVICE_URL}/{customer_id}")
+    except requests.exceptions.RequestException:
+        return {"error": "Customer service unavailable"}
+
+    if customer_response.status_code != 200:
+        return False, {"error": "Customer service validating customer", "message": f"{customer_response.json()}"}, customer_response.status_code
+    return True, customer_response.json(), 200
 
 ############################################
 
@@ -106,10 +112,10 @@ def calculate_order_total(products):
     pricing_response = requests.post(PRICING_SERVICE_URL, json = {"products": products})
 
     if pricing_response.status_code != 200:
-        return False, {"error": "Pricing service error calculating order price", "message": f"{pricing_response.json()}"}
+        return False, {"error": "Pricing service error calculating order price", "message": f"{pricing_response.json()}"}, pricing_response.status_code
     
     pricing_data = pricing_response.json()
-    return True, pricing_data["final_total"]
+    return True, pricing_data["final_total"], 200
 
 ############################################
 
@@ -140,9 +146,19 @@ def update_inventory_stock(products):
     inventory_update_response = requests.put(INVENTORY_SERVICE_UPDATE_URL, json = {"products": products})
 
     if inventory_update_response.status_code != 200:
-        return False, {"error": "Error while updating inventory stock after order creation.","message": f"{inventory_update_response.json()}"}
-    return True, None
+        return False, {"error": "Error while updating inventory stock after order creation.","message": f"{inventory_update_response.json()}"}, inventory_update_response.status_code
+    return True, None, 200
 
+############################################
+
+# update customer loyalty points
+def update_loyalty_points(customer_id, loyalty_points):
+    # use Customer service to update customer loyalty points
+    response = requests.put(f"{CUSTOMER_SERVICE_URL}/{customer_id}/loyalty", json={"loyalty_points": loyalty_points})
+    if response.status_code != 200:
+        return False, {"error": "Customer service error updating loyalty points", "message": f"{response.json()}"}, response.status_code
+    return True, response.json(), 200
+     
 ####################### API Endpoints #######################
 
 # Create new order
@@ -165,11 +181,9 @@ def create_order():
     cursor = conn.cursor(dictionary=True)
 
     # 2) check if the customer exists
-    customer = validate_customer_id(conn, customer_id)
-    if not customer:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": f"Customer with id {customer_id} doesn't exist."}), 404
+    valid, customer, status_code = validate_customer_id(customer_id)
+    if not valid:
+        return jsonify(customer), status_code
 
     # 3) Check product availability
     valid, products_info, status_code = check_product_availability(products)
@@ -179,15 +193,15 @@ def create_order():
         return jsonify(products_info), status_code
     
     # 4) calculate order price
-    valid, order_total = calculate_order_total(products)
+    valid, order_total, status_code = calculate_order_total(products)
     if not valid:
         cursor.close()
         conn.close()
-        return jsonify(order_total), 500
+        return jsonify(order_total), status_code
 
     try:
         # 5) insert order info into db
-        order_status = 'Created'    # to be updated after further actions (after building customers and notifications services)
+        order_status = 'Created'    # to be updated after sending notifications
         order_id = insert_order(cursor, customer_id, order_total, order_status)
         insert_order_items(cursor, order_id, products_info)
         conn.commit()
@@ -202,9 +216,16 @@ def create_order():
     conn.close()
 
     # 6) update inventory
-    valid, error = update_inventory_stock(products)
+    valid, error, status_code = update_inventory_stock(products)
     if not valid:
-        return jsonify(error), 500
+        return jsonify(error), status_code
+    
+    # 7) calculate and update customer loyalty points
+    new_loyalty_points = math.floor(order_total / 10)
+    customer_loyalty_points = customer["loyalty_points"]
+    valid, response, status_code = update_loyalty_points(customer_id, customer_loyalty_points + new_loyalty_points)
+    if not valid:
+        return jsonify(response), status_code
 
     return jsonify({
         "order_id": order_id,
@@ -252,7 +273,10 @@ def get_order_details(order_id):
         "status": order['status'],
         "created_at": order['created_at']
     }), 200
+
+
 ############################################
+
 # Get orders by customer_id used by Customer Service
 @app.route("/api/orders", methods=["GET"])
 def get_orders_by_customer():
@@ -285,6 +309,8 @@ def get_orders_by_customer():
     conn.close()
 
     return jsonify(orders), 200
+
+
 
 if __name__ == "__main__":
     app.run(port=5001, debug=True)

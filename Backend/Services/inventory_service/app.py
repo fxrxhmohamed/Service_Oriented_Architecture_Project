@@ -13,7 +13,7 @@ def home():
 # Adjust these parameters according to your database setup (check the mysql port you are using)
 db_config = {
     'host': 'localhost',
-    'port': 3307,
+    'port': 3306,
     'user': 'ecommerce_user',
     'password': 'secure_password',
     'database': 'ecommerce_system'
