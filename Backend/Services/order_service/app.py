@@ -16,6 +16,9 @@ PRICING_SERVICE_URL = "http://localhost:5003/api/pricing/calculate"
 # URL for Customer service to vaildate customer_id
 CUSTOMER_SERVICE_URL = "http://localhost:5004/api/customers"
 
+# URL for Notifications service to trigger sending notification message
+NOTIFICATION_SERVICE_URL = "http://localhost:5005/api/notifications/send"
+
 # Database connection configuration
 # Adjust these parameters according to your database setup (check the mysql port you are using)
 DB_CONFIG= {
@@ -158,6 +161,26 @@ def update_loyalty_points(customer_id, loyalty_points):
     if response.status_code != 200:
         return False, {"error": "Customer service error updating loyalty points", "message": f"{response.json()}"}, response.status_code
     return True, response.json(), 200
+
+############################################
+
+# update order status
+def update_order_status(cursor, order_id, new_status):
+    query = "Update orders Set status = %s where order_id = %s"
+    cursor.execute(query, (new_status,order_id))
+
+############################################
+
+# send confirmation messages
+def send_notification(notif_data):
+    # use notification service
+    notif_response = requests.post(NOTIFICATION_SERVICE_URL, json=notif_data)
+    
+    if notif_response.status_code != 200:
+        return False, {"error": "Error while sending notifications", "message": notif_response.json()}, notif_response.status_code
+    
+    return True, notif_response.json(), 200
+    
      
 ####################### API Endpoints #######################
 
@@ -212,12 +235,15 @@ def create_order():
         conn.close()
         return jsonify({"error": str(e)}), 500
     
-    cursor.close()
-    conn.close()
 
     # 6) update inventory
     valid, error, status_code = update_inventory_stock(products)
     if not valid:
+        # if inventory update failed change the order status to "Failed" 
+        update_order_status(cursor, order_id, "Failed")
+        conn.commit()
+        cursor.close()
+        conn.close()
         return jsonify(error), status_code
     
     # 7) calculate and update customer loyalty points
@@ -226,6 +252,24 @@ def create_order():
     valid, response, status_code = update_loyalty_points(customer_id, customer_loyalty_points + new_loyalty_points)
     if not valid:
         return jsonify(response), status_code
+    
+    # 8) trigger notifications service to send confirmation message
+    notif_data = {
+        "order_id": order_id,
+        "customer_id": customer_id,
+        "products": products
+    }
+    valid, response, status_code = send_notification(notif_data)
+    if not valid:
+        return jsonify(response), status_code
+    
+    # after completeing all the operations and sending notifications update the order status
+    order_status = "Confirmed"
+    update_order_status(cursor, order_id, "Confirmed")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
 
     return jsonify({
         "order_id": order_id,
