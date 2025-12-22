@@ -70,6 +70,8 @@ def validate_request_data(data):
     # check for list of products in the data
     if "products" not in data:
         return False, {"error": "Invalid input, 'products' required."}
+    if "total_amount" not in data:
+        return False, {"error": "Invalid input, 'total_amount' required."}
     return True, None
 
 ############################################
@@ -152,15 +154,6 @@ def update_inventory_stock(products):
         return False, {"error": "Error while updating inventory stock after order creation.","message": f"{inventory_update_response.json()}"}, inventory_update_response.status_code
     return True, None, 200
 
-############################################
-
-# update customer loyalty points
-def update_loyalty_points(customer_id, loyalty_points):
-    # use Customer service to update customer loyalty points
-    response = requests.put(f"{CUSTOMER_SERVICE_URL}/{customer_id}/loyalty", json={"loyalty_points": loyalty_points})
-    if response.status_code != 200:
-        return False, {"error": "Customer service error updating loyalty points", "message": f"{response.json()}"}, response.status_code
-    return True, response.json(), 200
 
 ############################################
 
@@ -169,17 +162,6 @@ def update_order_status(cursor, order_id, new_status):
     query = "Update orders Set status = %s where order_id = %s"
     cursor.execute(query, (new_status,order_id))
 
-############################################
-
-# send confirmation messages
-def send_notification(notif_data):
-    # use notification service
-    notif_response = requests.post(NOTIFICATION_SERVICE_URL, json=notif_data)
-    
-    if notif_response.status_code != 200:
-        return False, {"error": "Error while sending notifications", "message": notif_response.json()}, notif_response.status_code
-    
-    return True, notif_response.json(), 200
     
      
 ####################### API Endpoints #######################
@@ -196,6 +178,7 @@ def create_order():
 
     customer_id = data.get("customer_id")
     products = data.get("products")
+    total_amount = data.get("total_amount")
 
     # make db connection
     conn = get_db_connection()
@@ -208,24 +191,17 @@ def create_order():
     if not valid:
         return jsonify(customer), status_code
 
-    # 3) Check product availability
+    # 3) Check products availability
     valid, products_info, status_code = check_product_availability(products)
     if not valid:
         cursor.close()
         conn.close()
         return jsonify(products_info), status_code
-    
-    # 4) calculate order price
-    valid, order_total, status_code = calculate_order_total(products)
-    if not valid:
-        cursor.close()
-        conn.close()
-        return jsonify(order_total), status_code
 
     try:
-        # 5) insert order info into db
+        # 4) insert order info into db
         order_status = 'Created'    # to be updated after sending notifications
-        order_id = insert_order(cursor, customer_id, order_total, order_status)
+        order_id = insert_order(cursor, customer_id, total_amount, order_status)
         insert_order_items(cursor, order_id, products_info)
         conn.commit()
 
@@ -236,7 +212,7 @@ def create_order():
         return jsonify({"error": str(e)}), 500
     
 
-    # 6) update inventory
+    # 5) update inventory
     valid, error, status_code = update_inventory_stock(products)
     if not valid:
         # if inventory update failed change the order status to "Failed" 
@@ -246,24 +222,7 @@ def create_order():
         conn.close()
         return jsonify(error), status_code
     
-    # 7) calculate and update customer loyalty points
-    new_loyalty_points = math.floor(order_total / 10)
-    customer_loyalty_points = customer["loyalty_points"]
-    valid, response, status_code = update_loyalty_points(customer_id, customer_loyalty_points + new_loyalty_points)
-    if not valid:
-        return jsonify(response), status_code
-    
-    # 8) trigger notifications service to send confirmation message
-    notif_data = {
-        "order_id": order_id,
-        "customer_id": customer_id,
-        "products": products
-    }
-    valid, response, status_code = send_notification(notif_data)
-    if not valid:
-        return jsonify(response), status_code
-    
-    # after completeing all the operations and sending notifications update the order status
+    # after completeing all the operations update the order status
     order_status = "Confirmed"
     update_order_status(cursor, order_id, "Confirmed")
 
@@ -274,7 +233,7 @@ def create_order():
     return jsonify({
         "order_id": order_id,
         "products": products_info,
-        "total_amount": order_total,
+        "total_amount": total_amount,
         "status": order_status
     }), 200
 

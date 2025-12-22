@@ -1,14 +1,9 @@
 <%@ page contentType="text/html;charset=UTF-8" language="java" %>
+<%@ page import="org.json.JSONArray, org.json.JSONObject" %>
 <html>
 <head>
     <title>Checkout</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -16,142 +11,133 @@
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
         }
-
         .container {
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(10px);
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            padding: 40px;
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
             width: 100%;
-            max-width: 450px;
-            animation: slideIn 0.5s ease-out;
+            max-width: 650px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
         }
-
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(-30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
         h2 {
-            color: #333;
-            font-size: 28px;
-            margin-bottom: 30px;
             text-align: center;
-            font-weight: 600;
-        }
-
-        .form-group {
             margin-bottom: 25px;
-            position: relative;
         }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            color: #555;
-            font-weight: 500;
-            font-size: 14px;
-            letter-spacing: 0.3px;
-        }
-
-        input {
+        table {
             width: 100%;
-            padding: 14px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 10px;
-            font-size: 15px;
-            transition: all 0.3s ease;
-            background: #f9f9f9;
+            border-collapse: collapse;
+            margin-bottom: 20px;
         }
-
-        input:focus {
-            outline: none;
-            border-color: #667eea;
-            background: #fff;
-            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
-            transform: translateY(-2px);
+        th, td {
+            padding: 12px;
+            border-bottom: 1px solid #ddd;
+            text-align: center;
         }
-
-        input:hover {
-            border-color: #b8b8b8;
-        }
-
-        button {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        th {
+            background-color: #667eea;
             color: white;
+        }
+        .total {
+            font-size: 18px;
+            font-weight: bold;
+            text-align: right;
+            margin-top: 15px;
+        }
+        .buttons {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 30px;
+        }
+        button {
+            padding: 12px 25px;
             border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
+            border-radius: 8px;
+            font-size: 14px;
             cursor: pointer;
-            transition: all 0.3s ease;
-            margin-top: 10px;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
         }
-
-        button:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+        .cancel {
+            background: #ccc;
         }
-
-        button:active {
-            transform: translateY(-1px);
-        }
-
-        /* Input number styling */
-        input[type="number"]::-webkit-inner-spin-button,
-        input[type="number"]::-webkit-outer-spin-button {
-            opacity: 1;
-        }
-
-        /* Responsive */
-        @media (max-width: 480px) {
-            .container {
-                padding: 30px 20px;
-            }
-
-            h2 {
-                font-size: 24px;
-            }
+        .confirm {
+            background: #667eea;
+            color: white;
         }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>Create Order</h2>
+    <h2>Checkout</h2>
 
-    <form action="order" method="post">
+    <%
+        String productsJson = (String) request.getAttribute("productsJson");
+        Double totalAmount = (Double) request.getAttribute("totalAmount");
+        Integer customerId = (Integer) request.getAttribute("customerId");
+        Double subtotal = (Double) request.getAttribute("subtotal");
+
+        if (productsJson == null || totalAmount == null || subtotal == null) {
+    %>
+    <p style="color:red; text-align:center;">
+        Checkout data is missing. Please start again.
+    </p>
+    <%
+            return;
+        }
+
+        JSONArray products = new JSONArray(productsJson);
+    %>
+
+    <form action="confirmOrder" method="post">
+
+        <!-- Customer ID (VISIBLE INPUT) -->
         <div class="form-group">
-            <label>Customer ID</label>
-            <input type="number" name="customer_id" required>
+            <label><strong>Customer ID</strong></label>
+            <input
+                    type="number"
+                    name="customer_id"
+                    required
+                    value="<%= customerId != null ? customerId : "" %>"
+                    style="width:100%; padding:10px; margin-bottom:20px;"
+            >
         </div>
 
-        <div class="form-group">
-            <label>Product ID</label>
-            <input type="number" name="product_id" required>
+        <!-- Hidden data -->
+        <input type="hidden" name="productsJson" value='<%= productsJson %>'>
+        <input type="hidden" name="totalAmount" value="<%= totalAmount %>">
+
+        <table>
+            <tr>
+                <th>Product ID</th>
+                <th>Quantity</th>
+                <th>Unit Price</th>
+                <th>Subtotal</th>
+            </tr>
+
+            <%
+                for (int i = 0; i < products.length(); i++) {
+                    JSONObject p = products.getJSONObject(i);
+            %>
+            <tr>
+                <td><%= p.getInt("product_id") %></td>
+                <td><%= p.getInt("quantity") %></td>
+                <td>$<%= p.getDouble("unit_price") %></td>
+                <td>$<%= subtotal %></td>
+            </tr>
+            <% } %>
+        </table>
+
+        <h3 class="total">Total Amount: $<%= totalAmount %></h3>
+
+        <div class="buttons">
+            <button type="submit" class="confirm">Confirm Order</button>
+            <a href="index.jsp">
+                <button type="button" class="cancel">Cancel</button>
+            </a>
         </div>
 
-        <div class="form-group">
-            <label>Quantity</label>
-            <input type="number" name="quantity" min="1" required>
-        </div>
-
-        <button type="submit">Place Order</button>
     </form>
+
 </div>
 
 </body>
