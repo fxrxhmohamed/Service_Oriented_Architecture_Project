@@ -71,6 +71,23 @@
     <h2>Checkout</h2>
 
     <%
+        String stockMessage = (String) request.getAttribute("stockMessage");
+        if (stockMessage != null) {
+    %>
+    <div style="color: red; font-weight: bold; margin-bottom: 15px;">
+        <%= stockMessage %>
+    </div>
+    <div class="buttons">
+        <a href="index.jsp">
+            <button type="button" class="cancel">Back</button>
+        </a>
+    </div>
+    <%
+            return;
+        }
+    %>
+
+    <%
         String productsJson = (String) request.getAttribute("productsJson");
         Double totalAmount = (Double) request.getAttribute("totalAmount");
         Integer customerId = (Integer) request.getAttribute("customerId");
@@ -90,19 +107,17 @@
 
     <form action="confirmOrder" method="post">
 
-        <!-- Customer ID (VISIBLE INPUT) -->
+        <!-- Customer ID (DISPLAY ONLY) -->
         <div class="form-group">
             <label><strong>Customer ID</strong></label>
-            <input
-                    type="number"
-                    name="customer_id"
-                    required
-                    value="<%= customerId != null ? customerId : "" %>"
-                    style="width:100%; padding:10px; margin-bottom:20px;"
-            >
+            <p style="padding:10px; background:#f5f5f5; border-radius:5px;">
+                <%= customerId %>
+            </p>
         </div>
 
+
         <!-- Hidden data -->
+        <input type="hidden" name="customer_id" value="<%= customerId %>">
         <input type="hidden" name="productsJson" value='<%= productsJson %>'>
         <input type="hidden" name="totalAmount" value="<%= totalAmount %>">
 
@@ -111,7 +126,6 @@
                 <th>Product ID</th>
                 <th>Quantity</th>
                 <th>Unit Price</th>
-                <th>Subtotal</th>
             </tr>
 
             <%
@@ -122,11 +136,11 @@
                 <td><%= p.getInt("product_id") %></td>
                 <td><%= p.getInt("quantity") %></td>
                 <td>$<%= p.getDouble("unit_price") %></td>
-                <td>$<%= subtotal %></td>
             </tr>
             <% } %>
         </table>
 
+        <h3 class="total">Sub-Total Amount: $<%= subtotal %></h3>
         <h3 class="total">Total Amount: $<%= totalAmount %></h3>
 
         <div class="buttons">

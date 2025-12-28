@@ -18,10 +18,8 @@ import java.util.Enumeration;
 @WebServlet("/checkout")
 public class CheckoutServlet extends HttpServlet {
 
-    private static final String INVENTORY_CHECK_URL =
-            "http://localhost:5002/api/inventory/check/";
-    private static final String PRICING_URL =
-            "http://localhost:5003/api/pricing/calculate";
+    private static final String INVENTORY_CHECK_URL = "http://localhost:5002/api/inventory/check/";
+    private static final String PRICING_URL = "http://localhost:5003/api/pricing/calculate";
 @Override
 protected void doPost(HttpServletRequest request, HttpServletResponse response)
         throws ServletException, IOException {
@@ -29,7 +27,7 @@ protected void doPost(HttpServletRequest request, HttpServletResponse response)
     HttpClient client = HttpClient.newHttpClient();
     JSONArray productsForPricing = new JSONArray();
 
-    // 1. Read customer_id from the hidden input
+    //  Read customer_id from the hidden input
     String customerIdStr = request.getParameter("customer_id");
     Integer customerId = null;
     if (customerIdStr != null && !customerIdStr.isEmpty()) {
@@ -44,7 +42,7 @@ protected void doPost(HttpServletRequest request, HttpServletResponse response)
         return;
     }
 
-    // 2. Read selected products
+    //  Read selected products
     Enumeration<String> params = request.getParameterNames();
     while (params.hasMoreElements()) {
         String param = params.nextElement();
@@ -65,7 +63,7 @@ protected void doPost(HttpServletRequest request, HttpServletResponse response)
         return;
     }
 
-    //        Inventory validation using Inventory service
+    //  Inventory validation using Inventory service
     for (int i = 0; i < productsForPricing.length(); i++) {
         JSONObject p = productsForPricing.getJSONObject(i);
         int productId = p.getInt("product_id");
@@ -90,10 +88,14 @@ protected void doPost(HttpServletRequest request, HttpServletResponse response)
             int available = invData.getInt("quantity_available");
 
             if (requestedQty > available) {
-                response.sendError(HttpServletResponse.SC_BAD_REQUEST,
-                        "Not enough stock for product " + productId);
+                String message = "Only " + available + " items are available for product " + productId;
+                request.setAttribute("stockMessage", message);
+
+                // Forward back to checkout page
+                request.getRequestDispatcher("checkout.jsp").forward(request, response);
                 return;
             }
+
 
         } catch (InterruptedException e) {
             response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
@@ -113,29 +115,21 @@ protected void doPost(HttpServletRequest request, HttpServletResponse response)
             .build();
 
     try {
-        HttpResponse<String> pricingResponse =
-                client.send(pricingRequest, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> pricingResponse = client.send(pricingRequest, HttpResponse.BodyHandlers.ofString());
 
         if (pricingResponse.statusCode() != 200) {
-            response.sendError(HttpServletResponse.SC_BAD_REQUEST,
-                    "Pricing service error");
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST, "Pricing service error");
             return;
         }
 
+
         JSONObject pricingResult = new JSONObject(pricingResponse.body());
 
-        request.setAttribute("productsJson",
-                pricingResult.getJSONArray("items").toString());
-        request.setAttribute("subtotal",
-                pricingResult.getDouble("subtotal"));
-        request.setAttribute("taxRate",
-                pricingResult.getDouble("tax_rate"));
-        request.setAttribute("tax",
-                pricingResult.getDouble("tax"));
-        request.setAttribute("totalAmount",
-                pricingResult.getDouble("final_total"));
+        request.setAttribute("productsJson", pricingResult.getJSONArray("items").toString());
+        request.setAttribute("subtotal", pricingResult.getDouble("subtotal"));
+        request.setAttribute("totalAmount", pricingResult.getDouble("final_total"));
 
-        // 3. Pass customer ID to checkout.jsp
+        // Pass customer ID to checkout.jsp
         request.setAttribute("customerId", customerId);
 
         request.getRequestDispatcher("checkout.jsp").forward(request, response);

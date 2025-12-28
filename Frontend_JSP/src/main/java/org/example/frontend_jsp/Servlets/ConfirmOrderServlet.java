@@ -3,108 +3,135 @@ package org.example.frontend_jsp.Servlets;
 import jakarta.servlet.*;
 import jakarta.servlet.http.*;
 import jakarta.servlet.annotation.*;
-import org.json.*;
 
-import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.IOException;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 
 @WebServlet("/confirmOrder")
 public class ConfirmOrderServlet extends HttpServlet {
 
-    private static final String ORDER_SERVICE_URL =
-            "http://localhost:5001/api/orders/create";
+    private static final String ORDER_SERVICE_URL = "http://localhost:5001/api/orders/create";
 
-    private static final String CUSTOMER_SERVICE_URL =
-            "http://localhost:5004/api/customers";
+    private static final String CUSTOMER_SERVICE_URL = "http://localhost:5004/api/customers";
 
-    private static final String NOTIFICATION_SERVICE_URL =
-            "http://localhost:5005/api/notifications/send";
+    private static final String NOTIFICATION_SERVICE_URL = "http://localhost:5005/api/notifications/send";
 
     @Override
     protected void doPost(HttpServletRequest request, HttpServletResponse response)
             throws ServletException, IOException {
 
+        HttpClient client = HttpClient.newHttpClient();
+
+        // 1. Read parameters from checkout.jsp
         int customerId = Integer.parseInt(request.getParameter("customer_id"));
         double totalAmount = Double.parseDouble(request.getParameter("totalAmount"));
-
         JSONArray products = new JSONArray(request.getParameter("productsJson"));
 
-       // create order using Order service
-
+        // 2. create an order using the order service
         JSONObject orderPayload = new JSONObject();
         orderPayload.put("customer_id", customerId);
         orderPayload.put("products", products);
         orderPayload.put("total_amount", totalAmount);
 
-        JSONObject orderResponse =
-                callService(ORDER_SERVICE_URL, "POST", orderPayload);
+        HttpRequest orderRequest = HttpRequest.newBuilder()
+                .uri(URI.create(ORDER_SERVICE_URL))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        orderPayload.toString(), StandardCharsets.UTF_8))
+                .build();
 
-        int orderId = orderResponse.getInt("order_id");
+        HttpResponse<String> orderResponse;
+        try {
+            orderResponse = client.send(orderRequest, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException e) {
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return;
+        }
 
-       // update loyalty points using Customer service
+        if (orderResponse.statusCode() != 200) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                    "Order service error");
+            return;
+        }
 
-        int newPoints = (int) Math.floor(totalAmount / 10);
+        JSONObject orderResult = new JSONObject(orderResponse.body());
+        int orderId = orderResult.getInt("order_id");
+
+        // 3. get customer profile
+        HttpRequest customerGetRequest = HttpRequest.newBuilder()
+                .uri(URI.create(CUSTOMER_SERVICE_URL + "/" + customerId))
+                .GET()
+                .build();
+
+        HttpResponse<String> customerResponse;
+        try {
+            customerResponse = client.send(customerGetRequest, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException e) {
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return;
+        }
+
+        if (customerResponse.statusCode() != 200) {
+            response.sendError(HttpServletResponse.SC_BAD_REQUEST,
+                    "Customer service error");
+            return;
+        }
+
+        JSONObject customerObj = new JSONObject(customerResponse.body());
+        int oldPoints = customerObj.getInt("loyalty_points");
+        int updatedPoints = oldPoints + 10;
+
+        // 4. update customer loyalty points using customer service
 
         JSONObject loyaltyPayload = new JSONObject();
-        loyaltyPayload.put("loyalty_points", newPoints);
+        loyaltyPayload.put("loyalty_points", updatedPoints);
 
-        callService(
-                CUSTOMER_SERVICE_URL + "/" + customerId + "/loyalty",
-                "PUT",
-                loyaltyPayload
-        );
+        HttpRequest loyaltyRequest = HttpRequest.newBuilder()
+                .uri(URI.create(CUSTOMER_SERVICE_URL + "/" + customerId + "/loyalty"))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(
+                        loyaltyPayload.toString(), StandardCharsets.UTF_8))
+                .build();
 
-        // Send notification using Notification service
+        try {
+            client.send(loyaltyRequest, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException e) {
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return;
+        }
 
+        // 5. send notification using notification service
         JSONObject notifPayload = new JSONObject();
         notifPayload.put("order_id", orderId);
         notifPayload.put("customer_id", customerId);
         notifPayload.put("products", products);
 
-        callService(
-                NOTIFICATION_SERVICE_URL,
-                "POST",
-                notifPayload
-        );
+        HttpRequest notifRequest = HttpRequest.newBuilder()
+                .uri(URI.create(NOTIFICATION_SERVICE_URL))
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(
+                        notifPayload.toString(), StandardCharsets.UTF_8))
+                .build();
 
-        // Go to confirmation page
+        try {
+            client.send(notifRequest, HttpResponse.BodyHandlers.ofString());
+        } catch (InterruptedException e) {
+            response.sendError(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+            return;
+        }
 
+       // 6. forward to confirmation page
         request.setAttribute("orderId", orderId);
         request.setAttribute("products", products.toString());
         request.setAttribute("totalAmount", totalAmount);
 
-        request.getRequestDispatcher("confirmation.jsp")
-                .forward(request, response);
-    }
-
-    // helper method
-    private JSONObject callService(String url, String method, JSONObject payload)
-            throws IOException {
-
-        URL serviceUrl = new URL(url);
-        HttpURLConnection conn = (HttpURLConnection) serviceUrl.openConnection();
-
-        conn.setRequestMethod(method);
-        conn.setRequestProperty("Content-Type", "application/json");
-        conn.setDoOutput(true);
-
-        try (OutputStream os = conn.getOutputStream()) {
-            os.write(payload.toString().getBytes());
-        }
-
-        InputStream is = conn.getResponseCode() < 400
-                ? conn.getInputStream()
-                : conn.getErrorStream();
-
-        BufferedReader reader = new BufferedReader(new InputStreamReader(is));
-        StringBuilder response = new StringBuilder();
-        String line;
-
-        while ((line = reader.readLine()) != null) {
-            response.append(line);
-        }
-
-        return new JSONObject(response.toString());
+        request.getRequestDispatcher("confirmation.jsp").forward(request, response);
     }
 }

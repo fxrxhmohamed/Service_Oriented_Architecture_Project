@@ -10,6 +10,8 @@
     th, td { padding: 12px; border: 1px solid #ddd; text-align: center; }
     th { background-color: #667eea; color: white; }
     tr:hover { background-color: #f2f2f2; }
+    .back-link { text-align: center; margin-top: 20px; }
+    .back-link a { text-decoration: none; color: #667eea; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -70,9 +72,8 @@
   }
 %>
 
-<div style="margin-top: 20px; text-align:center;">
-  <a href="index.jsp?customer_id=<%= request.getAttribute("customer_id") %>">Back to Catalog</a>
+<div class="back-link">
+  <a href="index.jsp">Back</a>
 </div>
-
 </body>
 </html>

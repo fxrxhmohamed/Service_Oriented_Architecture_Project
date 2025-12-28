@@ -28,7 +28,7 @@
     <p><strong>Loyalty Points:</strong> <%= customer.getInt("loyalty_points") %></p>
 </div>
 <div class="back-link">
-    <a href="index.jsp">Back to Catalog</a>
+    <a href="index.jsp">Back</a>
 </div>
 <%
 } else {

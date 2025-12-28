@@ -76,7 +76,6 @@
                 <input type="number"
                        name="qty_<%= p.getInt("product_id") %>"
                        min="0"
-                       max="<%= p.getInt("quantity_available") %>"
                        value="0">
             </td>
         </tr>
